@@ -144,7 +144,7 @@ nmw <- n - nfw # male samples
 Xfw <- sapply(nfw, function(x) rmultinom(1, x, pfw)) # female multinomial (within)
 Xmw <- sapply(nmw, function(x) rmultinom(1, x, pmw)) # male multinomial (within)
 Xw <- rbind(Xfw, Xmw) # combine within samples
-  
+
 # Simulate via one stage sampling
 Xa <- rmultinom(nreps, n, pa) # across
 Xfa <- Xa[1:nages,] # females (across)
@@ -178,12 +178,6 @@ round(apply(Xfw, 1, mean) - exp_fw, 3)
 
 # Within - Variance (Females)
 var_fw <- n * pfw * propfw * (1-propfw) + propfw^2 * (n * pfw * (1 - pfw)) 
-
-phi <- propfw
-p <- pfw
-p * (1-p) * n * phi + p^2 * n * phi * (1 - phi)
-
-
 plot(apply(Xfw, 1, var))
 lines(var_fw)
 round(apply(Xfw, 1, var) - var_fw, 3)
@@ -205,10 +199,10 @@ plot(apply(rbind(Xfw, Xmw), 1, var), apply(Xa, 1, var)); abline(0,1)
 
 # MLE Comparison (Across with Across)
 fit_a_a <- nlminb(start =  rep(0.1, (nages * 2 - 1)) / (nages * 2 - 1), 
-                objective = nLL_mult_across, 
-                data = Xa[,1:nsamps], 
-                nsamp = nsamps,
-                control = list(iter.max = 1e5, eval.max = 1e5))
+                  objective = nLL_mult_across, 
+                  data = Xa[,1:nsamps], 
+                  nsamp = nsamps,
+                  control = list(iter.max = 1e5, eval.max = 1e5))
 
 # Compare estimate of p
 plot(pa)
@@ -217,10 +211,10 @@ round(pa - inv_logit(fit_a_a$par), 3)
 
 # MLE Comparison (Within with Across)
 fit_w_a <- nlminb(start =  rep(0.1, (nages * 2 - 1)) / (nages * 2 - 1), 
-                objective = nLL_mult_across, 
-                data = Xw[,1:nsamps], 
-                nsamp = nsamps,
-                control = list(iter.max = 1e5, eval.max = 1e5))
+                  objective = nLL_mult_across, 
+                  data = Xw[,1:nsamps], 
+                  nsamp = nsamps,
+                  control = list(iter.max = 1e5, eval.max = 1e5))
 
 # Compare estimate of p to single multinomial across approach
 plot(pa)
@@ -234,10 +228,10 @@ pars <- c(rep(0.1, (nages - 1)) / (nages - 1),
 
 # MLE Comparison (Across with Within)
 fit_a_w <- nlminb(start = pars, 
-       objective = nLL_bin_mult_within,
-       data = Xa[,1:nsamps],
-       nsamp = nsamps,
-       control = list(iter.max = 1e5, eval.max = 1e5))
+                  objective = nLL_bin_mult_within,
+                  data = Xa[,1:nsamps],
+                  nsamp = nsamps,
+                  control = list(iter.max = 1e5, eval.max = 1e5))
 
 # Compare obj
 fit_a_w$objective - fit_a_a$objective
@@ -256,10 +250,10 @@ exp(fit_a_w$par[length(fit_a_w$par)]) / (1 + exp(fit_a_w$par[length(fit_a_w$par)
 
 # MLE Comparison (Within with Within)
 fit_w_w <- nlminb(start = pars, 
-       objective = nLL_bin_mult_within,
-       data = Xw[,1:nsamps],
-       nsamp = nsamp,
-       control = list(iter.max = 1e5, eval.max = 1e5))
+                  objective = nLL_bin_mult_within,
+                  data = Xw[,1:nsamps],
+                  nsamp = nsamp,
+                  control = list(iter.max = 1e5, eval.max = 1e5))
 
 # Compare estimate of p (females)
 plot(pfw)
@@ -279,22 +273,6 @@ fit_w_a$objective - fit_w_w$objective
 # Compare expected values and variances
 plot(exp_a , c(exp_fw, exp_mw)); abline(0, 1) 
 plot(var_a , c(var_fw, var_mw)); abline(0, 1)
-
-# Look at correlations
-corrplot(cov2cor(cov(t(Xa))), title='Across', mar=c(0,0,1,0))
-corrplot(cov2cor(cov(t(Xw))), title='Within', mar=c(0,0,1,0))
-
-# Check to see if likelihoods match up 
-dmultinom(x = Xa[,sim], size = sum(Xa[,sim]), prob = pa, log = T)
-a <- dbinom(x = sum(Xa[1:nages,sim]), 100, prob = propfw, log = TRUE)
-b <- dmultinom(x = Xa[1:nages,sim], size = sum(Xa[1:nages,sim]), prob = pfw, log = T)
-c <- dmultinom(x = Xa[-c(1:nages),sim], size = sum(Xa[-c(1:nages),sim]), prob = pmw, log = T)
-a + b + c
-
-# Manually calculate likelihoods
-sim <- 4
-log(factorial(sum(Xa[,sim])) / prod(factorial(Xa[,sim])) * prod(c(pfw, pmw)^Xa[,sim]) * 
-      propfw^sum(Xa[1:nages,sim]) * (1 - propfw)^(sum(Xa[,sim]) - sum(Xa[1:nages,sim])))
 
 # Set up (Multinomial Multinomial) ---------------------------------------
 # nreps <- 1e5 # sims to do
@@ -479,12 +457,12 @@ log(factorial(sum(Xa[,sim])) / prod(factorial(Xa[,sim])) * prod(c(pfw, pmw)^Xa[,
 
 # Set up (Binomial Dirichlet Multinomial) ---------------------------------
 set.seed(123)
+n <- 100 # samples to draw
 nreps <- 1e5 # sims to do
 nsamps <- 100 # samples to estiamte with
-nsamps <- nreps
 nages <- 15 # number of ages
 nsexes <- 2 # number of sexes
-theta <- 0.1 # dispersion parameter
+theta <- 1 # dispersion parameter
 
 # Get proportions
 pfw <- runif(nages) # female proportions
@@ -495,10 +473,6 @@ pmw <- pmw/sum(pmw) # normalize (within)
 pfw <- pfw/sum(pfw) # normalize (within)
 pa <- c(propfw*pfw, (1-propfw)*pmw) # across
 pw <- c(pfw, pmw) # within
-
-# Dirichlet Multinomial parameters
-alpha_i <- theta * pa
-alpha_0 <- sum(alpha_i)
 
 # Simulate via two stage sampling
 nfw <- rbinom(nreps, n, propfw) # female samples
@@ -519,8 +493,12 @@ Xa_bdm <- Xa
 Xw_bdm <- Xw
 
 # Comparison (Binomial Dirichlet Multinomial) ---------------------------------------
+# Dirichlet Multinomial Across parameters
+alpha_i <- n * theta * pa
+alpha_0 <- sum(alpha_i)
+
 # Across - Expectation
-exp_a <- n * (alpha_i / alpha_0) # expectration of a single dir mult draw
+exp_a <- n * (pa / sum(pa)) # expectration of a single dir mult draw
 plot(rowMeans(Xa))
 lines(exp_a) 
 sum(exp_a - rowMeans(Xa))
@@ -532,8 +510,8 @@ lines(apply(Xa, 1, var))
 mean(apply(Xa, 1, var) - var_a)
 
 # Within - Expectation
-exp_fw <- n *  propfw * (theta * n * propfw * pfw) / sum(theta * n * propfw * pfw)
-exp_mw <- n *  propmw * (theta * n * propmw * pmw) / sum(theta * n * propmw * pmw)
+exp_fw <- n *  propfw * (propfw * pfw) / sum(propfw * pfw)
+exp_mw <- n *  propmw * (propmw * pmw) / sum(propmw * pmw)
 plot(apply(rbind(Xfw, Xmw), 1, mean))
 lines(c(exp_fw, exp_mw))
 mean(apply(rbind(Xfw, Xmw), 1, mean) - c(exp_fw, exp_mw))
@@ -543,15 +521,15 @@ mean(apply(rbind(Xfw, Xmw), 1, mean) - c(exp_fw, exp_mw))
 alpha_i_fw <- theta * n * propfw * pfw
 alpha_0_fw <- sum(alpha_i_fw)
 var_fw <- ((alpha_i_fw / alpha_0_fw) * (1 - (alpha_i_fw / alpha_0_fw)) * (1 / (1 + alpha_0_fw))) * 
-            ((n*propfw * (1 - propfw)) + (n*propfw)^2 + (alpha_0_fw *n*propfw))  + 
-          (pfw)^2 * n*propfw * (1-propfw)
+  ((n*propfw * (1 - propfw)) + (n*propfw)^2 + (alpha_0_fw *n*propfw))  + 
+  (pfw)^2 * n*propfw * (1-propfw)
 
 # dirichlet multinomial males
 alpha_i_mw <- theta * n * propmw * pmw
-alpha_0_mw <- n * theta
+alpha_0_mw <- sum(alpha_i_mw)
 var_mw <- ((alpha_i_mw / alpha_0_mw) * (1 - (alpha_i_mw / alpha_0_mw)) * (1 / (1 + alpha_0_mw))) * 
-          ((n*propmw * (1 - propmw)) + (n*propmw)^2 + (alpha_0_mw *n*propmw))  + 
-          (pmw)^2 * n*propmw * (1-propmw)
+  ((n*propmw * (1 - propmw)) + (n*propmw)^2 + (alpha_0_mw *n*propmw))  + 
+  (pmw)^2 * n*propmw * (1-propmw)
 
 # Dirichlet Multinomial Variance (Within)
 plot(apply(rbind(Xfw, Xmw), 1, var))
@@ -698,10 +676,9 @@ abline(0,1, lty = 2, lwd = 2)
 
 ecdf_Xa_bm <- ecdf(Xa_bm)
 ecdf_Xw_bm <- ecdf(Xw_bm)
-plot(ecdf_Xa_bm(1:20) - ecdf_Xw_bm(1:20), type = 'l', lwd = 3, col = "blue",
+plot(ecdf_Xa_bm(1:25) - ecdf_Xw_bm(1:25), type = 'l', lwd = 3, col = "blue",
      ylab = "Difference in ECDF", main = "C) Multinomial"); abline(0, 0, lty = 2, lwd = 2)
-
-text(15, -0.0001, paste("p = ", round(dgof_bm$p.value, 2)))
+text(15, -0.0001, paste("p = ", round(dgof_bm$p.value, 3)))
 
 # plot(apply(Xw_mm, 1, var), apply(Xa_mm, 1, var), xlab = "Variance (Within)", ylab = "Variance (Across)",
 #      main = "Multinomial Multinomial", pch = 19, col = "blue")
@@ -723,9 +700,9 @@ abline(0,1, lty = 2)
 
 ecdf_Xa_bdm <- ecdf(Xa_bdm)
 ecdf_Xw_bdm <- ecdf(Xw_bdm)
-plot(ecdf_Xw_bdm(1:30) - ecdf_Xa_bdm(1:30), type = 'l', lwd = 3, col = "blue",
+plot(ecdf_Xw_bdm(1:85) - ecdf_Xa_bdm(1:85), type = 'l', lwd = 3, col = "blue",
      ylab = "Difference in ECDF", main = "F) Dirichlet-Multinomial"); abline(0, 0, lty = 2, lwd = 2)
-text(23, -0.001, "p < 0.05")
+text(50, -0.001, "p < 0.05")
 # plot(apply(Xw_mdm, 1, var), apply(Xa_mdm, 1, var), xlab = "Variance (Within)", ylab = "Variance (Across)",
 #      main = "Multinomial Dirichlet-Multinomial", pch = 19, col = "blue")
 # abline(0,1, lty = 2)
