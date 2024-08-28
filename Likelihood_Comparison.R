@@ -124,7 +124,7 @@ nLL_bin_dirmult_within <- function(data, pars, nsamp) {
 # Set up (Binomial Multinomial) ------------------------------------------------------------------
 set.seed(123)
 nreps <- 1e5 # sims to do
-nsamps <- nreps
+nsamps <- 100
 n <- 100 # sample size
 nages <- 15 # number of ages
 
