@@ -38,39 +38,6 @@ nLL_bin_mult_within <- function(data, pars, nsamp) {
   return(-sum(nLL))
 }
 
-# nLL_mult_mult_within <- function(data, pars, nsamp, nsexes) {
-#   nLL <- vector(length = nsamp, mode = "integer")
-#   # Set up parameter vectors
-#   # logit constrain multinomial parameters (first stage multinomial)
-#   prop <- exp(pars[length(pars):(length(pars) - nsexes + 2)]) / (1 + sum(exp(pars[length(pars):(length(pars) - nsexes + 2)])))
-#   prop <- c(prop, 1 - sum(prop)) # proportions for first stage multinomial
-#   
-#   # Logit transform second stage multinomial (get parameters here)
-#   pw_list <- list()
-#   for(s in 1:nsexes) {
-#     # get indexing for parameters
-#     if(s == 1) idx <- 1:(nages-1)
-#     else idx <- idx + (nages - 1)
-#     pw_tmp <- exp(pars[idx]) / (1 + sum(exp(pars[idx]))) # logit constrain
-#     pw_list[[s]] <- c(pw_tmp, 1 - sum(pw_tmp)) # proportions sex 
-#   } # end s loop
-#   
-#   for(i in 1:nsamp) {
-#     obs_nw_tmp_vec <- vector() # temp vector to store observed n
-#     for(s in 1:nsexes) {
-#       # get indexing for data
-#       if(s == 1) idx <- 1:nages
-#       else idx <- idx + nages
-#       obs_nw_tmp <- sum(data[idx,i]) # get observed within n
-#       obs_nw_tmp_vec <- c(obs_nw_tmp_vec, obs_nw_tmp)
-#       nLL[i] <- nLL[i] + dmultinom(data[idx,i], obs_nw_tmp, pw_list[[s]], log = TRUE) # do multinomial wihtin draws
-#     } # s loop
-#     # do multinomial sex probabilities
-#     nLL[i] <- nLL[i] + dmultinom(obs_nw_tmp_vec, size = sum(obs_nw_tmp_vec), prop, log = TRUE) 
-#   } # i loop
-#   return(-sum(nLL))
-# }
-
 rdirmult <- function(theta, n, prob) {
   dir_mult_alpha <- theta * n * prob # variability of dirichlet controlled by sample size and theta
   if(n > 0) {
@@ -120,6 +87,39 @@ nLL_bin_dirmult_within <- function(data, pars, nsamp) {
   }
   return(-sum(nLL))
 }
+
+# nLL_mult_mult_within <- function(data, pars, nsamp, nsexes) {
+#   nLL <- vector(length = nsamp, mode = "integer")
+#   # Set up parameter vectors
+#   # logit constrain multinomial parameters (first stage multinomial)
+#   prop <- exp(pars[length(pars):(length(pars) - nsexes + 2)]) / (1 + sum(exp(pars[length(pars):(length(pars) - nsexes + 2)])))
+#   prop <- c(prop, 1 - sum(prop)) # proportions for first stage multinomial
+#   
+#   # Logit transform second stage multinomial (get parameters here)
+#   pw_list <- list()
+#   for(s in 1:nsexes) {
+#     # get indexing for parameters
+#     if(s == 1) idx <- 1:(nages-1)
+#     else idx <- idx + (nages - 1)
+#     pw_tmp <- exp(pars[idx]) / (1 + sum(exp(pars[idx]))) # logit constrain
+#     pw_list[[s]] <- c(pw_tmp, 1 - sum(pw_tmp)) # proportions sex 
+#   } # end s loop
+#   
+#   for(i in 1:nsamp) {
+#     obs_nw_tmp_vec <- vector() # temp vector to store observed n
+#     for(s in 1:nsexes) {
+#       # get indexing for data
+#       if(s == 1) idx <- 1:nages
+#       else idx <- idx + nages
+#       obs_nw_tmp <- sum(data[idx,i]) # get observed within n
+#       obs_nw_tmp_vec <- c(obs_nw_tmp_vec, obs_nw_tmp)
+#       nLL[i] <- nLL[i] + dmultinom(data[idx,i], obs_nw_tmp, pw_list[[s]], log = TRUE) # do multinomial wihtin draws
+#     } # s loop
+#     # do multinomial sex probabilities
+#     nLL[i] <- nLL[i] + dmultinom(obs_nw_tmp_vec, size = sum(obs_nw_tmp_vec), prop, log = TRUE) 
+#   } # i loop
+#   return(-sum(nLL))
+# }
 
 # Set up (Binomial Multinomial) ------------------------------------------------------------------
 set.seed(123)
@@ -273,6 +273,202 @@ fit_w_a$objective - fit_w_w$objective
 # Compare expected values and variances
 plot(exp_a , c(exp_fw, exp_mw)); abline(0, 1) 
 plot(var_a , c(var_fw, var_mw)); abline(0, 1)
+
+# Set up (Binomial Dirichlet Multinomial) ---------------------------------
+set.seed(123)
+n <- 100 # samples to draw
+nreps <- 1e5 # sims to do
+nsamps <- 100 # samples to estiamte with
+nages <- 15 # number of ages
+nsexes <- 2 # number of sexes
+theta <- 1 # dispersion parameter
+
+# Get proportions
+pfw <- runif(nages) # female proportions
+pmw <- runif(nages) # male propotions
+propfw <- sum(pfw) / sum(pfw, pmw) # female ratios
+propmw <- 1 - propfw # male ratios
+pmw <- pmw/sum(pmw) # normalize (within)
+pfw <- pfw/sum(pfw) # normalize (within)
+pa <- c(propfw*pfw, (1-propfw)*pmw) # across
+pw <- c(pfw, pmw) # within
+
+# Simulate via two stage sampling
+nfw <- rbinom(nreps, n, propfw) # female samples
+nmw <- n - nfw # male samples
+Xfw <- sapply(nfw, function(x) rdirmult(theta, x, pfw)) # female multinomial (within)
+Xmw <- sapply(nmw, function(x) rdirmult(theta, x, pmw)) # male multinomial (within)
+Xw <- rbind(Xfw, Xmw) # combine within samples
+
+# Simulate via one stage sampling
+Xa <- sapply(rep(n, nreps), function(x) rdirmult(theta, x, pa)) # across
+Xfa <- Xa[1:nages,] # females (across)
+XMa <- Xa[-(1:nages),] # males 
+
+dgof_bdm <- dgof::ks.test(Xw, ecdf(Xa))
+
+# Rename variables for use later
+Xa_bdm <- Xa
+Xw_bdm <- Xw
+
+# Comparison (Binomial Dirichlet Multinomial) ---------------------------------------
+# Dirichlet Multinomial Across parameters
+alpha_i <- n * theta * pa
+alpha_0 <- sum(alpha_i)
+
+# Across - Expectation
+exp_a <- n * (pa / sum(pa)) # expectration of a single dir mult draw
+plot(rowMeans(Xa))
+lines(exp_a) 
+sum(exp_a - rowMeans(Xa))
+
+# Across - Variance
+var_a <- n * (alpha_i / alpha_0) * (1 - (alpha_i / alpha_0)) * ((n + alpha_0)/(1 + alpha_0))
+plot(var_a)
+lines(apply(Xa, 1, var))
+mean(apply(Xa, 1, var) - var_a)
+
+# Within - Expectation
+exp_fw <- n *  propfw * (propfw * pfw) / sum(propfw * pfw)
+exp_mw <- n *  propmw * (propmw * pmw) / sum(propmw * pmw)
+plot(apply(rbind(Xfw, Xmw), 1, mean))
+lines(c(exp_fw, exp_mw))
+mean(apply(rbind(Xfw, Xmw), 1, mean) - c(exp_fw, exp_mw))
+
+# Within - Variance
+# dirichlet multinomial females
+alpha_i_fw <- theta * n * propfw * pfw
+alpha_0_fw <- sum(alpha_i_fw)
+var_fw <- ((alpha_i_fw / alpha_0_fw) * (1 - (alpha_i_fw / alpha_0_fw)) * (1 / (1 + alpha_0_fw))) * 
+  ((n*propfw * (1 - propfw)) + (n*propfw)^2 + (alpha_0_fw *n*propfw))  + 
+  (pfw)^2 * n*propfw * (1-propfw)
+
+# dirichlet multinomial males
+alpha_i_mw <- theta * n * propmw * pmw
+alpha_0_mw <- sum(alpha_i_mw)
+var_mw <- ((alpha_i_mw / alpha_0_mw) * (1 - (alpha_i_mw / alpha_0_mw)) * (1 / (1 + alpha_0_mw))) * 
+  ((n*propmw * (1 - propmw)) + (n*propmw)^2 + (alpha_0_mw *n*propmw))  + 
+  (pmw)^2 * n*propmw * (1-propmw)
+
+# Dirichlet Multinomial Variance (Within)
+plot(apply(rbind(Xfw, Xmw), 1, var))
+lines(c(var_fw, var_mw))
+mean(apply(rbind(Xfw, Xmw), 1, var) - c(var_fw, var_mw))
+
+# Compare variances
+plot(apply(rbind(Xfw, Xmw), 1, var), apply(Xa, 1, var)); abline(0,1)
+
+# MLE Comparison (Across with Across)
+fit_a_a <- nlminb(start =  rep(0.1, nages * nsexes), 
+                  objective = nLL_ddirmult_across, 
+                  data = Xa[,1:nsamps], 
+                  nsamp = nsamps,
+                  control = list(iter.max = 1e5, eval.max = 1e5))
+
+# Compare proportions
+plot(pa)
+lines(inv_logit(fit_a_a$par[-length(fit_a_a$par)]))
+mean(pa - inv_logit(fit_a_a$par[-length(fit_a_a$par)]))
+
+theta
+exp(fit_a_a$par[length(fit_a_a$par)]) # estimates this just right (about)
+
+# MLE Comparison (Within with Across)
+fit_w_a <- nlminb(start =  rep(0.1, nages * nsexes), 
+                  objective = nLL_ddirmult_across, 
+                  data = Xw[,1:nsamps], 
+                  nsamp = nsamps,
+                  control = list(iter.max = 1e5, eval.max = 1e5))
+
+
+# Compare proportions
+plot(pa)
+lines(inv_logit(fit_w_a$par[-length(fit_w_a$par)]))
+sum(pa - inv_logit(fit_w_a$par[-length(fit_w_a$par)]))
+
+theta
+exp(fit_w_a$par[length(fit_w_a$par)]) # (underestimates dispersion when applying within
+# to across - i.e., think its less variable then it actually should be)
+
+# MLE Comparison (Across with Within)
+fit_a_w <- nlminb(start =  rep(0.1, nages * nsexes), 
+                  objective = nLL_bin_dirmult_within, 
+                  data = Xa[,1:nsamps], 
+                  nsamp = nsamps,
+                  control = list(iter.max = 1e5, eval.max = 1e5))
+
+# sex females
+plot(pfw)
+lines(inv_logit(fit_a_w$par[1:(nages - 1)]))
+sum(pfw - inv_logit(fit_a_w$par[1:(nages - 1)]))
+
+# sex males
+plot(pmw)
+lines(inv_logit(fit_a_w$par[-c(1:(nages - 1), length(fit_a_w$par), length(fit_a_w$par) - 1)]))
+sum(pmw - inv_logit(fit_a_w$par[-c(1:(nages - 1), length(fit_a_w$par), length(fit_a_w$par) - 1)]))
+
+theta
+exp(fit_a_w$par[length(fit_a_w$par) - 1]) # underestimates theta - more overdispersed than it actually should be
+
+# MLE Comparison (Within with Within)
+fit_w_w <- nlminb(start =  rep(0.1, nages * nsexes), 
+                  objective = nLL_bin_dirmult_within, 
+                  data = Xw[,1:nsamps], 
+                  nsamp = nsamps,
+                  control = list(iter.max = 1e5, eval.max = 1e5))
+
+# sex females
+plot(pfw)
+lines(inv_logit(fit_w_w$par[1:(nages - 1)]))
+sum(pfw - inv_logit(fit_w_w$par[1:(nages - 1)]))
+
+# sex males
+plot(pmw)
+lines(inv_logit(fit_w_w$par[-c(1:(nages - 1), length(fit_w_w$par), length(fit_w_w$par) - 1)]))
+sum(pmw - inv_logit(fit_w_w$par[-c(1:(nages - 1), length(fit_w_w$par), length(fit_w_w$par) - 1)]))
+
+theta
+exp(fit_w_w$par[length(fit_w_w$par) - 1]) # just right!
+
+# Slightly Different objs
+fit_w_w$objective
+fit_w_a$objective
+
+# Slightly Different objs
+fit_a_w$objective
+fit_a_a$objective
+
+# Plot Variance Comparisons -----------------------------------------------
+par(mfrow = c(2,3))
+
+plot(apply(Xw_bm, 1, mean), apply(Xa_bm, 1, mean), xlab = "Expected Value (Within)", ylab = "Expected Value (Across)",
+     main = "A) Multinomial", pch = 19, col = "blue4", lwd = 3)
+abline(0,1, lty = 2, lwd = 2)
+
+plot(apply(Xw_bm, 1, var), apply(Xa_bm, 1, var), xlab = "Variance (Within)", ylab = "Variance (Across)",
+     main = "B) Multinomial", pch = 19, col = "blue4", lwd = 3)
+abline(0,1, lty = 2, lwd = 2)
+
+ecdf_Xa_bm <- ecdf(Xa_bm)
+ecdf_Xw_bm <- ecdf(Xw_bm)
+plot(ecdf_Xa_bm(1:25) - ecdf_Xw_bm(1:25), type = 'l', lwd = 4, col = "blue4",
+     ylab = "Difference in ECDF", main = "C) Multinomial"); abline(0, 0, lty = 2, lwd = 2)
+text(15, -0.0001, paste("p = ", round(dgof_bm$p.value, 3)))
+
+plot(apply(Xw_bdm, 1, mean), apply(Xw_bdm, 1, mean), xlab = "Expected Value (Within)", ylab = "Expected Value (Across)",
+     main = "D) Dirichlet-Multinomial", pch = 19, col = "blue4", lwd = 3)
+abline(0,1, lty = 2, lwd = 2)
+
+plot(apply(Xw_bdm, 1, var), apply(Xa_bdm, 1, var), xlab = "Variance (Within)", ylab = "Variance (Across)",
+     main = "E) Dirichlet-Multinomial", pch = 19, col = "blue4", lwd = 3)
+abline(0,1, lty = 2, lwd = 2)
+
+ecdf_Xa_bdm <- ecdf(Xa_bdm)
+ecdf_Xw_bdm <- ecdf(Xw_bdm)
+plot(ecdf_Xw_bdm(1:85) - ecdf_Xa_bdm(1:85), type = 'l', lwd = 4, col = "blue4",
+     ylab = "Difference in ECDF", main = "F) Dirichlet-Multinomial"); abline(0, 0, lty = 2, lwd = 2)
+text(50, -0.001, "p < 0.05")
+
 
 # Set up (Multinomial Multinomial) ---------------------------------------
 # nreps <- 1e5 # sims to do
@@ -455,170 +651,6 @@ plot(var_a , c(var_fw, var_mw)); abline(0, 1)
 # lines(inv_logit(fit_a_w$par[length(fit_a_w$par):(length(fit_a_w$par) - nsexes + 2)]))
 
 
-# Set up (Binomial Dirichlet Multinomial) ---------------------------------
-set.seed(123)
-n <- 100 # samples to draw
-nreps <- 1e5 # sims to do
-nsamps <- 100 # samples to estiamte with
-nages <- 15 # number of ages
-nsexes <- 2 # number of sexes
-theta <- 1 # dispersion parameter
-
-# Get proportions
-pfw <- runif(nages) # female proportions
-pmw <- runif(nages) # male propotions
-propfw <- sum(pfw) / sum(pfw, pmw) # female ratios
-propmw <- 1 - propfw # male ratios
-pmw <- pmw/sum(pmw) # normalize (within)
-pfw <- pfw/sum(pfw) # normalize (within)
-pa <- c(propfw*pfw, (1-propfw)*pmw) # across
-pw <- c(pfw, pmw) # within
-
-# Simulate via two stage sampling
-nfw <- rbinom(nreps, n, propfw) # female samples
-nmw <- n - nfw # male samples
-Xfw <- sapply(nfw, function(x) rdirmult(theta, x, pfw)) # female multinomial (within)
-Xmw <- sapply(nmw, function(x) rdirmult(theta, x, pmw)) # male multinomial (within)
-Xw <- rbind(Xfw, Xmw) # combine within samples
-
-# Simulate via one stage sampling
-Xa <- sapply(rep(n, nreps), function(x) rdirmult(theta, x, pa)) # across
-Xfa <- Xa[1:nages,] # females (across)
-XMa <- Xa[-(1:nages),] # males 
-
-dgof_bdm <- dgof::ks.test(Xw, ecdf(Xa))
-
-# Rename variables for use later
-Xa_bdm <- Xa
-Xw_bdm <- Xw
-
-# Comparison (Binomial Dirichlet Multinomial) ---------------------------------------
-# Dirichlet Multinomial Across parameters
-alpha_i <- n * theta * pa
-alpha_0 <- sum(alpha_i)
-
-# Across - Expectation
-exp_a <- n * (pa / sum(pa)) # expectration of a single dir mult draw
-plot(rowMeans(Xa))
-lines(exp_a) 
-sum(exp_a - rowMeans(Xa))
-
-# Across - Variance
-var_a <- n * (alpha_i / alpha_0) * (1 - (alpha_i / alpha_0)) * ((n + alpha_0)/(1 + alpha_0))
-plot(var_a)
-lines(apply(Xa, 1, var))
-mean(apply(Xa, 1, var) - var_a)
-
-# Within - Expectation
-exp_fw <- n *  propfw * (propfw * pfw) / sum(propfw * pfw)
-exp_mw <- n *  propmw * (propmw * pmw) / sum(propmw * pmw)
-plot(apply(rbind(Xfw, Xmw), 1, mean))
-lines(c(exp_fw, exp_mw))
-mean(apply(rbind(Xfw, Xmw), 1, mean) - c(exp_fw, exp_mw))
-
-# Within - Variance
-# dirichlet multinomial females
-alpha_i_fw <- theta * n * propfw * pfw
-alpha_0_fw <- sum(alpha_i_fw)
-var_fw <- ((alpha_i_fw / alpha_0_fw) * (1 - (alpha_i_fw / alpha_0_fw)) * (1 / (1 + alpha_0_fw))) * 
-  ((n*propfw * (1 - propfw)) + (n*propfw)^2 + (alpha_0_fw *n*propfw))  + 
-  (pfw)^2 * n*propfw * (1-propfw)
-
-# dirichlet multinomial males
-alpha_i_mw <- theta * n * propmw * pmw
-alpha_0_mw <- sum(alpha_i_mw)
-var_mw <- ((alpha_i_mw / alpha_0_mw) * (1 - (alpha_i_mw / alpha_0_mw)) * (1 / (1 + alpha_0_mw))) * 
-  ((n*propmw * (1 - propmw)) + (n*propmw)^2 + (alpha_0_mw *n*propmw))  + 
-  (pmw)^2 * n*propmw * (1-propmw)
-
-# Dirichlet Multinomial Variance (Within)
-plot(apply(rbind(Xfw, Xmw), 1, var))
-lines(c(var_fw, var_mw))
-mean(apply(rbind(Xfw, Xmw), 1, var) - c(var_fw, var_mw))
-
-# Compare variances
-plot(apply(rbind(Xfw, Xmw), 1, var), apply(Xa, 1, var)); abline(0,1)
-
-# MLE Comparison (Across with Across)
-fit_a_a <- nlminb(start =  rep(0.1, nages * nsexes), 
-                  objective = nLL_ddirmult_across, 
-                  data = Xa[,1:nsamps], 
-                  nsamp = nsamps,
-                  control = list(iter.max = 1e5, eval.max = 1e5))
-
-# Compare proportions
-plot(pa)
-lines(inv_logit(fit_a_a$par[-length(fit_a_a$par)]))
-mean(pa - inv_logit(fit_a_a$par[-length(fit_a_a$par)]))
-
-theta
-exp(fit_a_a$par[length(fit_a_a$par)]) # estimates this just right (about)
-
-# MLE Comparison (Within with Across)
-fit_w_a <- nlminb(start =  rep(0.1, nages * nsexes), 
-                  objective = nLL_ddirmult_across, 
-                  data = Xw[,1:nsamps], 
-                  nsamp = nsamps,
-                  control = list(iter.max = 1e5, eval.max = 1e5))
-
-
-# Compare proportions
-plot(pa)
-lines(inv_logit(fit_w_a$par[-length(fit_w_a$par)]))
-sum(pa - inv_logit(fit_w_a$par[-length(fit_w_a$par)]))
-
-theta
-exp(fit_w_a$par[length(fit_w_a$par)]) # (underestimates dispersion when applying within
-# to across - i.e., think its less variable then it actually should be)
-
-# MLE Comparison (Across with Within)
-fit_a_w <- nlminb(start =  rep(0.1, nages * nsexes), 
-                  objective = nLL_bin_dirmult_within, 
-                  data = Xa[,1:nsamps], 
-                  nsamp = nsamps,
-                  control = list(iter.max = 1e5, eval.max = 1e5))
-
-# sex females
-plot(pfw)
-lines(inv_logit(fit_a_w$par[1:(nages - 1)]))
-sum(pfw - inv_logit(fit_a_w$par[1:(nages - 1)]))
-
-# sex males
-plot(pmw)
-lines(inv_logit(fit_a_w$par[-c(1:(nages - 1), length(fit_a_w$par), length(fit_a_w$par) - 1)]))
-sum(pmw - inv_logit(fit_a_w$par[-c(1:(nages - 1), length(fit_a_w$par), length(fit_a_w$par) - 1)]))
-
-theta
-exp(fit_a_w$par[length(fit_a_w$par) - 1]) # underestimates theta - more overdispersed than it actually should be
-
-# MLE Comparison (Within with Within)
-fit_w_w <- nlminb(start =  rep(0.1, nages * nsexes), 
-                  objective = nLL_bin_dirmult_within, 
-                  data = Xw[,1:nsamps], 
-                  nsamp = nsamps,
-                  control = list(iter.max = 1e5, eval.max = 1e5))
-
-# sex females
-plot(pfw)
-lines(inv_logit(fit_w_w$par[1:(nages - 1)]))
-sum(pfw - inv_logit(fit_w_w$par[1:(nages - 1)]))
-
-# sex males
-plot(pmw)
-lines(inv_logit(fit_w_w$par[-c(1:(nages - 1), length(fit_w_w$par), length(fit_w_w$par) - 1)]))
-sum(pmw - inv_logit(fit_w_w$par[-c(1:(nages - 1), length(fit_w_w$par), length(fit_w_w$par) - 1)]))
-
-theta
-exp(fit_w_w$par[length(fit_w_w$par) - 1]) # just right!
-
-# Slightly Different objs
-fit_w_w$objective
-fit_w_a$objective
-
-# Slightly Different objs
-fit_a_w$objective
-fit_a_a$objective
-
 # Set up (Multinomial Dirichlet-Multinomial) ---------------------------------------
 # nreps <- 1e5 # sims to do
 # n <- 100 # sample size
@@ -662,53 +694,3 @@ fit_a_a$objective
 # # Rename variables for use later
 # Xa_mdm <- Xa
 # Xw_mdm <- Xw
-
-# Plot Variance Comparisons -----------------------------------------------
-par(mfrow = c(2,3))
-
-plot(apply(Xw_bm, 1, mean), apply(Xa_bm, 1, mean), xlab = "Expected Value (Within)", ylab = "Expected Value (Across)",
-     main = "A) Multinomial", pch = 19, col = "blue")
-abline(0,1, lty = 2, lwd = 2)
-
-plot(apply(Xw_bm, 1, var), apply(Xa_bm, 1, var), xlab = "Variance (Within)", ylab = "Variance (Across)",
-     main = "B) Multinomial", pch = 19, col = "blue")
-abline(0,1, lty = 2, lwd = 2)
-
-ecdf_Xa_bm <- ecdf(Xa_bm)
-ecdf_Xw_bm <- ecdf(Xw_bm)
-plot(ecdf_Xa_bm(1:25) - ecdf_Xw_bm(1:25), type = 'l', lwd = 3, col = "blue",
-     ylab = "Difference in ECDF", main = "C) Multinomial"); abline(0, 0, lty = 2, lwd = 2)
-text(15, -0.0001, paste("p = ", round(dgof_bm$p.value, 3)))
-
-# plot(apply(Xw_mm, 1, var), apply(Xa_mm, 1, var), xlab = "Variance (Within)", ylab = "Variance (Across)",
-#      main = "Multinomial Multinomial", pch = 19, col = "blue")
-# abline(0,1, lty = 2)
-
-# ecdf_Xa_mm <- ecdf(Xa_mm)
-# ecdf_Xw_mm <- ecdf(Xw_mm)
-# plot(ecdf_Xw_mm(1:17) - ecdf_Xa_mm(1:17), type = 'l', lwd = 3, col = "blue",
-#      ylab = "Difference in ECDF", main = "Multinomial Multinomial"); abline(0, 0, lty = 2, lwd = 2)
-# 
-
-plot(apply(Xw_bdm, 1, mean), apply(Xw_bdm, 1, mean), xlab = "Expected Value (Within)", ylab = "Expected Value (Across)",
-     main = "D) Dirichlet-Multinomial", pch = 19, col = "blue")
-abline(0,1, lty = 2)
-
-plot(apply(Xw_bdm, 1, var), apply(Xa_bdm, 1, var), xlab = "Variance (Within)", ylab = "Variance (Across)",
-     main = "E) Dirichlet-Multinomial", pch = 19, col = "blue")
-abline(0,1, lty = 2)
-
-ecdf_Xa_bdm <- ecdf(Xa_bdm)
-ecdf_Xw_bdm <- ecdf(Xw_bdm)
-plot(ecdf_Xw_bdm(1:85) - ecdf_Xa_bdm(1:85), type = 'l', lwd = 3, col = "blue",
-     ylab = "Difference in ECDF", main = "F) Dirichlet-Multinomial"); abline(0, 0, lty = 2, lwd = 2)
-text(50, -0.001, "p < 0.05")
-# plot(apply(Xw_mdm, 1, var), apply(Xa_mdm, 1, var), xlab = "Variance (Within)", ylab = "Variance (Across)",
-#      main = "Multinomial Dirichlet-Multinomial", pch = 19, col = "blue")
-# abline(0,1, lty = 2)
-
-# ecdf_Xa_mdm <- ecdf(Xa_mdm)
-# ecdf_Xw_mdm <- ecdf(Xw_mdm)
-# plot(ecdf_Xw_mdm(1:27) - ecdf_Xa_mdm(1:27), type = 'l', lwd = 3, col = "blue",
-#      ylab = "Difference in ECDF", main = "Multinomial Dirichlet-Multinomial"); abline(0, 0, lty = 2, lwd = 2)
-
