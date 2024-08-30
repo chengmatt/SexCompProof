@@ -339,14 +339,14 @@ mean(apply(rbind(Xfw, Xmw), 1, mean) - c(exp_fw, exp_mw))
 # dirichlet multinomial females
 alpha_i_fw <- theta * n * propfw * pfw
 alpha_0_fw <- sum(alpha_i_fw)
-var_fw <- ((alpha_i_fw / alpha_0_fw) * (1 - (alpha_i_fw / alpha_0_fw)) * (1 / (1 + alpha_0_fw))) * 
+var_fw <- ((pfw) * (1 - (pfw)) * (1 / (1 + alpha_0_fw))) * 
   ((n*propfw * (1 - propfw)) + (n*propfw)^2 + (alpha_0_fw *n*propfw))  + 
   (pfw)^2 * n*propfw * (1-propfw)
 
 # dirichlet multinomial males
 alpha_i_mw <- theta * n * propmw * pmw
 alpha_0_mw <- sum(alpha_i_mw)
-var_mw <- ((alpha_i_mw / alpha_0_mw) * (1 - (alpha_i_mw / alpha_0_mw)) * (1 / (1 + alpha_0_mw))) * 
+var_mw <- ((pmw) * (1 - (pmw)) * (1 / (1 + alpha_0_mw))) * 
   ((n*propmw * (1 - propmw)) + (n*propmw)^2 + (alpha_0_mw *n*propmw))  + 
   (pmw)^2 * n*propmw * (1-propmw)
 
